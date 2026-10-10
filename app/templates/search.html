@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="masthead">
+  <div class="masthead__place">
+    <span class="masthead__eyebrow">选择观测地点</span>
+    <h1 class="masthead__city">{{ query or '输入城市名' }}</h1>
+  </div>
+  <a class="masthead__switch" href="/">返回</a>
+</header>
+
+{% if error %}
+  <p class="notice notice--warn">{{ error }}</p>
+{% endif %}
+
+{% if query and not results and not error %}
+  <p class="notice">没找到「{{ query }}」。试试只写城市名，比如「杭州」「成都」。</p>
+{% endif %}
+
+{% if results %}
+  <ul class="hits">
+    {% for item in results %}
+      <li class="hits__item">
+        <a class="hits__link"
+           href="/set-city?name={{ item.name|urlencode }}&province={{ item.province|urlencode }}&adcode={{ item.adcode|default('', true) }}">
+          <span class="hits__name">{{ item.name }}</span>
+          <span class="hits__meta">
+            <span class="hits__adcode">{{ item.province or item.adcode }}</span>
+            <span class="hits__level">
+              {%- if item.level == 'province' -%}省
+              {%- elif item.level == 'city' -%}市
+              {%- elif item.level == 'district' -%}区县
+              {%- else -%}{{ item.level }}
+              {%- endif -%}
+            </span>
+          </span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+<section class="picker" aria-label="重新搜索">
+  <form class="picker__form" action="/search" method="get" role="search">
+    <label class="visually-hidden" for="q">城市名</label>
+    <input class="picker__input" id="q" name="q" type="search" placeholder="杭州"
+           value="{{ query }}" autocomplete="off" enterkeyhint="search" maxlength="40" required autofocus>
+    <button class="picker__submit" type="submit">查询</button>
+  </form>
+</section>
+{% endblock %}

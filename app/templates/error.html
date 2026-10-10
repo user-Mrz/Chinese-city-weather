@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="masthead">
+  <div class="masthead__place">
+    <span class="masthead__eyebrow">出错了</span>
+    <h1 class="masthead__city">{{ heading }}</h1>
+  </div>
+  <a class="masthead__switch" href="/">回首页</a>
+</header>
+
+<p class="notice notice--warn">{{ message }}</p>
+
+{% if adcode %}
+  <p class="picker__hint"><a href="/?adcode={{ adcode }}&name={{ city_name|default('')|urlencode }}">继续查看这个城市的天气</a></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="masthead">
+  <div class="masthead__place">
+    <span class="masthead__eyebrow">观测地点</span>
+    {% if place %}
+      <h1 class="masthead__city">{{ place.name }}</h1>
+    {% else %}
+      <h1 class="masthead__city masthead__city--unknown">未识别</h1>
+    {% endif %}
+  </div>
+  <a class="masthead__switch" href="#pick">换个地方</a>
+</header>
+
+{% if place and place.note %}
+  <p class="notice">{{ place.note }}</p>
+{% endif %}
+
+{% if error %}
+  <p class="notice notice--warn">{{ error }}</p>
+{% endif %}
+
+{% if live %}
+  <section class="readout" aria-label="实况读数">
+    <div class="readout__hero">
+      <div class="readout__glyph" aria-hidden="true">{{ weather_icon(live.weather) }}</div>
+      <div class="readout__temp">
+        <span class="readout__num">{{ live.temperature or '—' }}</span><span class="readout__unit">&#8451;</span>
+      </div>
+      <div class="readout__label">气温</div>
+    </div>
+
+    <dl class="readout__data">
+      <div class="readout__row">
+        <dt>天气现象</dt>
+        <dd>{{ live.weather or '—' }}</dd>
+      </div>
+      <div class="readout__row">
+        <dt>相对湿度</dt>
+        <dd>{{ live.humidity or '—' }}{% if live.humidity %}%{% endif %}</dd>
+      </div>
+      <div class="readout__row">
+        <dt>风向风力</dt>
+        <dd class="readout__wind">
+          <svg class="barb" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"
+               style="transform: rotate({{ wind_angle(live.winddirection) }}deg)">
+            <path d="M12 21V4M12 4l-4.2 4.6M12 4l4.2 4.6"
+                  fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>{{ wind_text(live.winddirection, live.windpower) }}</span>
+        </dd>
+      </div>
+      <div class="readout__row">
+        <dt>观测时间</dt>
+        <dd>{{ live.reporttime or '—' }}</dd>
+      </div>
+    </dl>
+  </section>
+{% elif not error and place %}
+  <p class="notice">这里暂时没有天气数据。</p>
+{% endif %}
+
+{% if forecast and forecast.days %}
+  <section class="forecast" aria-label="未来天气">
+    <h2 class="section-title">未来{{ forecast.days|length }}天</h2>
+    <table class="days">
+      <caption class="visually-hidden">未来天气预报</caption>
+      <tbody>
+        {% for day in forecast.days %}
+          <tr>
+            <th scope="row" class="days__when">
+              <span class="days__date">{{ short_date(day.date) }}</span>
+              <span class="days__week">{{ weekday_label(day.week) }}</span>
+            </th>
+            <td class="days__what">
+              <span class="days__icon" aria-hidden="true">{{ weather_icon(day.dayweather) }}</span>
+              <span class="days__text">
+                {{ day.dayweather }}{% if day.nightweather and day.nightweather != day.dayweather %}转{{ day.nightweather }}{% endif %}
+              </span>
+            </td>
+            <td class="days__temp">
+              <span class="days__lo">{{ day.nighttemp }}&#176;</span>
+              <span class="days__sep">/</span>
+              <span class="days__hi">{{ day.daytemp }}&#176;</span>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if forecast.reporttime %}
+      <p class="forecast__stamp">预报发布时间 {{ forecast.reporttime }}</p>
+    {% endif %}
+  </section>
+{% endif %}
+
+{% if auto_refresh_seconds and auto_refresh_seconds > 0 %}
+  <section class="autorefresh" aria-label="自动更新">
+    <span class="autorefresh__text">
+      每 {{ (auto_refresh_seconds / 60)|int }} 分钟自动更新，<span id="refresh-countdown">--:--</span> 后刷新
+    </span>
+    <button class="autorefresh__btn" id="refresh-now" type="button">立即更新</button>
+  </section>
+{% endif %}
+
+<section class="picker" id="pick" aria-label="更换城市">
+  <h2 class="section-title">换个地方</h2>
+  <form class="picker__form" action="/search" method="get" role="search">
+    <label class="visually-hidden" for="q">城市名</label>
+    <input class="picker__input" id="q" name="q" type="search" placeholder="杭州"
+           autocomplete="off" enterkeyhint="search" maxlength="40" required>
+    <button class="picker__submit" type="submit">查询</button>
+  </form>
+  <p class="picker__hint">
+    现在显示的是{% if place %}「{{ place.name }}」{% else %}手动选择{% endif %}。
+    <a href="/reset">回到自动定位</a>
+  </p>
+  {% if show_debug %}
+    <p class="picker__hint picker__hint--debug">
+      调试模式已开启：在网址后加 <code>?debug_ip=1.2.3.4</code> 可模拟其他地区访问者。
+    </p>
+  {% endif %}
+</section>
+
+{% if auto_refresh_seconds and auto_refresh_seconds > 0 %}
+<script>
+  // 自动刷新：倒计时结束后整页重载（与服务端天气缓存 TTL 对齐）。
+  // 后台标签页不倒数，切回来时若已过点则立即刷新；正在搜索框输入时暂缓。
+  (function () {
+    var interval = {{ auto_refresh_seconds }};
+    var box = document.getElementById("refresh-countdown");
+    var deadline = Date.now() + interval * 1000;
+
+    function fmt(s) {
+      var m = Math.floor(s / 60), r = s % 60;
+      return m + ":" + (r < 10 ? "0" + r : r);
+    }
+    function typing() {
+      var el = document.activeElement;
+      return !!(el && el.form && el.form.getAttribute("action") === "/search");
+    }
+    function render() {
+      var left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      if (box) box.textContent = fmt(left);
+      return left;
+    }
+    setInterval(function () {
+      if (document.hidden || typing()) return;
+      if (render() <= 0) location.reload();
+    }, 1000);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && !typing() && Date.now() >= deadline) location.reload();
+    });
+    document.getElementById("refresh-now").addEventListener("click", function () {
+      location.reload();
+    });
+    render();
+  })();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,14 @@
+# 本地配置（含高德 Key），绝不提交
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# 本机沙箱环境专用的依赖目录与引导脚本（正常开发用 venv 即可）
+.pylibs/
+.piptmp/
+.wheels/
+.devtools/

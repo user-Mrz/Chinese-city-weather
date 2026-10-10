@@ -1,0 +1,57 @@
+[Unit]
+Description=网页版自动定位查天气
+Documentation=file:///opt/weather-web/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=weather
+Group=weather
+WorkingDirectory=/opt/weather-web
+EnvironmentFile=-/opt/weather-web/.env
+
+# 单个 worker 是硬性要求：限流、缓存和会话状态都在进程内，
+# 多 worker 会让同一个访问者落到不同的桶里，限流直接失效。
+# 端口由 .env 里的 PORT 决定（默认 80），改这里或改 .env 都行。
+ExecStart=/opt/weather-web/.venv/bin/python -m app.main
+
+# 注意：不要加 --proxy-headers。
+# 直连模式下它会让 uvicorn 用 X-Forwarded-For 覆盖客户端地址，
+# 而那个头是任何人都能伪造的 —— 等于把「指定任意城市」和「绕过限流」两个洞一起打开。
+# 如果将来真的加了反向代理，请改成通过 TRUSTED_PROXIES 配置可信代理 IP。
+
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+# 2G 小机器的内存护栏
+MemoryHigh=384M
+MemoryMax=512M
+
+# 加固
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+# 用 80 端口时不需要 root，只授予绑定低端口这一项能力
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=weather-web
+
+[Install]
+WantedBy=multi-user.target
